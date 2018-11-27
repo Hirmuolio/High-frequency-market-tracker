@@ -85,18 +85,41 @@ while True:
 	time_now = datetime.utcnow()
 	
 	for item_id in current_prices:
-		#current_prices[item]
+		
+		
+		
+		
 		if not item_id in market_cache:
+			#New item. Add entry for it in cache.
 			market_cache[ str(current_prices[item_id]['type_id']) ] = {'type_id':current_prices[item_id]['type_id'], 'buy_times':[], 'buy_prices':[], 'sell_times':[], 'sell_prices':[]}
 		
 		if len(current_prices[item_id]['buy_prices']) != 0:
 			if not str(time_now) in market_cache[ item_id ]['buy_times']:
-				market_cache[ item_id ]['buy_times'].append( str(time_now) )
-				market_cache[ item_id ]['buy_prices'].append( max(current_prices[item_id]['buy_prices']) )
+				current_buy = max(current_prices[item_id]['buy_prices'])
+				
+				if len(current_prices[item_id]['buy_prices']) > 1:
+					if market_cache[ item_id ]['buy_prices'][-1] == market_cache[ item_id ]['buy_prices'][-2] == current_buy:
+						market_cache[ item_id ]['buy_times'][-1] = str(time_now)
+					else:
+						market_cache[ item_id ]['buy_times'].append( str(time_now) )
+						market_cache[ item_id ]['buy_prices'].append( current_buy )
+				else:
+					market_cache[ item_id ]['buy_times'].append( str(time_now) )
+					market_cache[ item_id ]['buy_prices'].append( current_buy )
+		
 		if len(current_prices[item_id]['sell_prices']) != 0:
 			if not str(time_now) in market_cache[ item_id ]['sell_times']:
-				market_cache[ item_id ]['sell_times'].append( str(time_now) )
-				market_cache[ item_id ]['sell_prices'].append( min(current_prices[item_id]['sell_prices']) )
+				current_sell = min(current_prices[item_id]['sell_prices'])
+				
+				if len(current_prices[item_id]['sell_prices']) > 1:
+						if market_cache[ item_id ]['sell_prices'][-1] == market_cache[ item_id ]['sell_prices'][-2] == current_sell:
+							market_cache[ item_id ]['sell_times'][-1] = str(time_now)
+						else:
+							market_cache[ item_id ]['sell_times'].append( str(time_now) )
+							market_cache[ item_id ]['sell_prices'].append( current_sell )
+				else:
+					market_cache[ item_id ]['sell_times'].append( str(time_now) )
+					market_cache[ item_id ]['sell_prices'].append( current_sell )
 	
 	try:
 		with gzip.GzipFile('market_cache.gz', 'w') as outfile:
