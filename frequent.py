@@ -46,14 +46,21 @@ def import_market():
 	return [orders, expires]
 	
 
-
+def percentage_change(value1, value2):
+	try:
+		change = abs(value1- value2)/value1
+		return change
+	except:
+		#Value 2 is zero (divide by zero)
+		#We don't really care. Lets return 100
+		return 100
+	
 try:
 	with gzip.GzipFile('market_cache.gz', 'r') as fin:
 		market_cache = json.loads(fin.read().decode('utf-8'))
 except:
 	print('no market cache found')
 	market_cache = {}
-
 
 
 #Main loop
@@ -85,41 +92,54 @@ while True:
 	time_now = datetime.utcnow()
 	
 	for item_id in current_prices:
-		
-		
+		item_id = str(item_id)
 		
 		
 		if not item_id in market_cache:
 			#New item. Add entry for it in cache.
-			market_cache[ str(current_prices[item_id]['type_id']) ] = {'type_id':current_prices[item_id]['type_id'], 'buy_times':[], 'buy_prices':[], 'sell_times':[], 'sell_prices':[]}
+			market_cache[ item_id ] = {'times':[], 'buy_prices':[], 'sell_prices':[]}
+		
 		
 		if len(current_prices[item_id]['buy_prices']) != 0:
-			if not str(time_now) in market_cache[ item_id ]['buy_times']:
-				current_buy = max(current_prices[item_id]['buy_prices'])
-				
-				if len(current_prices[item_id]['buy_prices']) > 1:
-					if market_cache[ item_id ]['buy_prices'][-1] == market_cache[ item_id ]['buy_prices'][-2] == current_buy:
-						market_cache[ item_id ]['buy_times'][-1] = str(time_now)
-					else:
-						market_cache[ item_id ]['buy_times'].append( str(time_now) )
-						market_cache[ item_id ]['buy_prices'].append( current_buy )
-				else:
-					market_cache[ item_id ]['buy_times'].append( str(time_now) )
-					market_cache[ item_id ]['buy_prices'].append( current_buy )
+			current_buy = max(current_prices[item_id]['buy_prices'])
+		else:
+			current_buy = 0
+
 		
 		if len(current_prices[item_id]['sell_prices']) != 0:
-			if not str(time_now) in market_cache[ item_id ]['sell_times']:
-				current_sell = min(current_prices[item_id]['sell_prices'])
+			current_sell = min(current_prices[item_id]['sell_prices'])
+		else:
+			current_sell = 0
+			
+			
+		
+		sell_is_duplicate = False
+		buy_is_duplicate = False
+		
+		if len( market_cache[ item_id ]['buy_prices'] ) > 1:
+			diff_1 = percentage_change(market_cache[ item_id ]['buy_prices'][-1], current_buy)
+			diff_2 = percentage_change(market_cache[ item_id ]['buy_prices'][-2], current_buy)
+			
+			if diff_1 < 0.03 and diff_2 < 0.03:
+				buy_is_duplicate = True
 				
-				if len(current_prices[item_id]['sell_prices']) > 1:
-						if market_cache[ item_id ]['sell_prices'][-1] == market_cache[ item_id ]['sell_prices'][-2] == current_sell:
-							market_cache[ item_id ]['sell_times'][-1] = str(time_now)
-						else:
-							market_cache[ item_id ]['sell_times'].append( str(time_now) )
-							market_cache[ item_id ]['sell_prices'].append( current_sell )
-				else:
-					market_cache[ item_id ]['sell_times'].append( str(time_now) )
-					market_cache[ item_id ]['sell_prices'].append( current_sell )
+		if len( market_cache[ item_id ]['sell_prices']) > 1:
+			diff_1 = percentage_change(market_cache[ item_id ]['sell_prices'][-1], current_sell)
+			diff_2 = percentage_change(market_cache[ item_id ]['sell_prices'][-2], current_sell)
+			
+			if diff_1 < 0.03 and diff_2 < 0.03:
+				sell_is_duplicate = True
+				
+				
+				
+		if sell_is_duplicate and buy_is_duplicate:
+			market_cache[ item_id ]['times'][-1] = str(time_now)
+			market_cache[ item_id ]['sell_prices'][-1] = current_sell
+			market_cache[ item_id ]['buy_prices'][-1] = current_buy
+		else:
+			market_cache[ item_id ]['times'].append( str(time_now) )
+			market_cache[ item_id ]['sell_prices'].append( current_sell )
+			market_cache[ item_id ]['buy_prices'].append( current_buy )
 	
 	try:
 		with gzip.GzipFile('market_cache.gz', 'w') as outfile:

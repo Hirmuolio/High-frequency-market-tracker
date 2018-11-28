@@ -10,7 +10,7 @@ import time
 
 
 
-plex = 16272
+plex = 44992
 
 
 try:
@@ -31,23 +31,20 @@ def plot_prices(item_id):
 	#market_cache[str(item_id)]['buy_prices']
 	
 	if str(item_id) in market_cache:
-		buy_times2 = []
-		sell_times2 = []
+		times = []
 	
-		for time in market_cache[str(item_id)]['buy_times']:
-			buy_times2.append(datetime.strptime(time, '%Y-%m-%d  %H:%M:%S.%f'))
-		for time in market_cache[str(item_id)]['sell_times']:
-			sell_times2.append(datetime.strptime(time, '%Y-%m-%d  %H:%M:%S.%f'))
+		for time in market_cache[str(item_id)]['times']:
+			times.append(datetime.strptime(time, '%Y-%m-%d  %H:%M:%S.%f'))
 		
-		plt.plot(buy_times2, market_cache[str(item_id)]['buy_prices'])
-		plt.plot(sell_times2, market_cache[str(item_id)]['sell_prices'])
+		plt.plot(times, market_cache[str(item_id)]['buy_prices'])
+		plt.plot(times, market_cache[str(item_id)]['sell_prices'])
 	
 		plt.gcf().autofmt_xdate()
 		
 		plt.xlabel('Time')
 		plt.ylabel('Price')
-		if text in item_cache:
-			plt.title(item_cache[text]['name'])
+		if str(item_id) in item_cache:
+			plt.title(item_cache[str(item_id)]['name'])
 		plt.grid(True)
 		plt.show()
 		
