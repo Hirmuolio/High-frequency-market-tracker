@@ -8,5 +8,5 @@ plot.py: This can be used to plot the data. Just type in the ID of the item you 
 The repository includes sample market_cache.gz that contains several hours of market data. If you want to start from scratch just delete it.
 
 Requires: 
-* Grequests https://github.com/kennethreitz/grequests
+* Request-futures https://github.com/ross/requests-futures
 * Matplotlib https://matplotlib.org/index.html
