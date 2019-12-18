@@ -12,38 +12,24 @@ import esi_calling
 
 esi_calling.set_user_agent('Hirmuolio/high-frequency-market-tracker')
 
-		
-def import_market():
-	region_id = '10000002'
+def import_orders(region_id):
+	#'10000044' Solitude
+	#10000002 = Jita
+	all_orders = []
 	
-	response_array = esi_calling.call_esi(scope = '/v1/markets/{par}/orders/', url_parameter=region_id, job = 'get market orders')
+	response_array = esi_calling.call_esi(scope = '/v1/markets/{par}/orders/', url_parameters=[region_id], job = 'get market orders')[0]
 	
-	if type(response_array) != type([]):
-		#For some reason it is not a list. Make it into a list
-		response_array = [response_array]
-	
-	#Process the responses:
-	#Merge all the orders form different responses
-	#Save the time until next requests should be sent
-	orders = []
-	time_now = datetime.utcnow()
-	expires = time_now
+	expires = datetime.utcnow()
 	
 	for response in response_array:
-		try:
-			orders.extend(response.json())
-		except:
-			print('This should not be here ', response)
-			print('Got ', len(response_array), ' responses')
-		
-		expires = max( expires, datetime.strptime(response.headers['expires'], '%a, %d %b %Y %H:%M:%S GMT') )
-	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Got', len(orders), 'orders. Expires at', expires)
+		all_orders.extend(response.json())
+	print('Got {:,d} orders.'.format(len(all_orders)))
+	expires = max( expires, datetime.strptime(response_array[-1].headers['expires'], '%a, %d %b %Y %H:%M:%S GMT') )
 	
 	with open('expires.txt', "w") as text_file:
 		print(str(expires), file=text_file)
 	
-	return [orders, expires]
+	return [all_orders, expires]
 	
 
 def percentage_change(value1, value2):
@@ -68,7 +54,7 @@ except:
 while True:
 	print('\n')
 	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing market...')
-	esi_response = import_market()
+	esi_response = import_orders( 10000002 )
 	
 	
 	#Process market orders
