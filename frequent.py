@@ -12,8 +12,8 @@ import esi_calling
 
 esi_calling.set_user_agent('Hirmuolio/high-frequency-market-tracker')
 
+
 def import_orders(region_id):
-	#'10000044' Solitude
 	#10000002 = Jita
 	all_orders = []
 	
@@ -32,14 +32,19 @@ def import_orders(region_id):
 	return [all_orders, expires]
 	
 
-def percentage_change(value1, value2):
-	try:
-		change = abs(value1- value2)/value1
-		return change
-	except:
-		#Value 2 is zero (divide by zero)
-		#We don't really care. Lets return 100
-		return 100
+def prices_are_about_same( price1, price2, price3 ):
+	if price1 == price2 == price3:
+		return True
+	elif price1 == 0 or price2 == 0 or price3 == 0:
+		return False
+	
+	treshold = 0.01
+	diff1 = abs( 1 - price1/price2) < treshold
+	diff2 = abs( 1 - price2/price3) < treshold
+	
+	if diff1 and diff2:
+		return True
+	return False
 	
 try:
 	with gzip.GzipFile('market_cache.gz', 'r') as fin:
@@ -64,10 +69,10 @@ while True:
 	
 	#Merge all prices to a json
 	for market_order in esi_response[0]:
-		#if market_order['location_id'] == 60003760: #Only take orders from Jita 4-4
 		#type id = market_order['type_id']
 		if not str(market_order['type_id']) in current_prices:
-			current_prices[str(market_order['type_id'])] = { 'buy_prices':[], 'sell_prices':[], 'type_id':market_order['type_id']}
+			current_prices[str(market_order['type_id'])] = { 'buy_prices':[0], 'sell_prices':[]}
+		
 		
 		if market_order['is_buy_order'] == True:
 			current_prices[str(market_order['type_id'])]['buy_prices'].append( market_order['price'] )
@@ -85,40 +90,29 @@ while True:
 			#New item. Add entry for it in cache.
 			market_cache[ item_id ] = {'times':[], 'buy_prices':[], 'sell_prices':[]}
 		
+		current_buy = max( current_prices[item_id]['buy_prices'] )
 		
-		if len(current_prices[item_id]['buy_prices']) != 0:
-			current_buy = max(current_prices[item_id]['buy_prices'])
-		else:
-			current_buy = 0
-
-		
-		if len(current_prices[item_id]['sell_prices']) != 0:
-			current_sell = min(current_prices[item_id]['sell_prices'])
+		if len( current_prices[item_id]['sell_prices'] ) != 0:
+			current_sell = min( current_prices[item_id]['sell_prices'] )
 		else:
 			current_sell = 0
-			
-			
 		
-		sell_is_duplicate = False
-		buy_is_duplicate = False
 		
+		duplicate = False
 		if len( market_cache[ item_id ]['buy_prices'] ) > 1:
-			diff_1 = percentage_change(market_cache[ item_id ]['buy_prices'][-1], current_buy)
-			diff_2 = percentage_change(market_cache[ item_id ]['buy_prices'][-2], current_buy)
+			previous_buy = market_cache[ item_id ]['buy_prices'][-1]
+			previous_buy_2 = market_cache[ item_id ]['buy_prices'][-2]
 			
-			if diff_1 < 0.03 and diff_2 < 0.03:
-				buy_is_duplicate = True
-				
-		if len( market_cache[ item_id ]['sell_prices']) > 1:
-			diff_1 = percentage_change(market_cache[ item_id ]['sell_prices'][-1], current_sell)
-			diff_2 = percentage_change(market_cache[ item_id ]['sell_prices'][-2], current_sell)
+			previous_sell = market_cache[ item_id ]['sell_prices'][-1]
+			previous_sell_2 = market_cache[ item_id ]['sell_prices'][-2]
 			
-			if diff_1 < 0.03 and diff_2 < 0.03:
-				sell_is_duplicate = True
-				
-				
-				
-		if sell_is_duplicate and buy_is_duplicate:
+			duplicate_buy = prices_are_about_same( current_buy, previous_buy, previous_buy_2 )
+			duplicate_sell = prices_are_about_same( current_sell, previous_sell, previous_sell_2 )
+			
+			if duplicate_buy and duplicate_sell:
+				duplicate = True
+		
+		if duplicate:
 			market_cache[ item_id ]['times'][-1] = str(time_now)
 			market_cache[ item_id ]['sell_prices'][-1] = current_sell
 			market_cache[ item_id ]['buy_prices'][-1] = current_buy
@@ -126,10 +120,11 @@ while True:
 			market_cache[ item_id ]['times'].append( str(time_now) )
 			market_cache[ item_id ]['sell_prices'].append( current_sell )
 			market_cache[ item_id ]['buy_prices'].append( current_buy )
+			
 	
 	try:
 		with gzip.GzipFile('market_cache.gz', 'w') as outfile:
-			outfile.write(json.dumps(market_cache).encode('utf-8')) 
+			outfile.write(json.dumps(market_cache).encode('utf-8'))
 	except:
 		print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Failed to save cache. Cache will be saved after next import (do not keep the cache opened in other programs to avoid this)')
 	
@@ -140,5 +135,5 @@ while True:
 	
 	esi_response = []
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',round(time_to_refetch)+1 ,'seconds')
-	time.sleep( round(time_to_refetch)+1 )
+	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',round(time_to_refetch)+4 ,'seconds')
+	time.sleep( round(time_to_refetch)+4 )
