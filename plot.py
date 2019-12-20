@@ -8,9 +8,7 @@ import matplotlib.pyplot as plt
 import gzip
 import time
 
-
-
-plex = 44992
+import esi_calling
 
 
 try:
@@ -43,13 +41,13 @@ def plot_prices(item_id):
 		
 		plt.xlabel('Time')
 		plt.ylabel('Price')
-		if str(item_id) in item_cache:
-			plt.title(item_cache[str(item_id)]['name'])
+		
+		plt.title(item_cache[str(item_id)]['name'])
 		plt.grid(True)
 		plt.show()
 		
 	else:
-		print('No data for ', item_id)
+		print('No data for "'+ item_id+ '"')
 	
 	
 	
@@ -60,7 +58,14 @@ while True:
 
 	text = input("Give type ID: ")
 	
-	if text in item_cache:
-		print('Plotting: ', item_cache[text]['name'])
-
+	if not text in item_cache:
+		print( 'Fetching info on ID "'+ text+'"')
+		response = esi_calling.call_esi(scope = '/v3/universe/types/{par}/', url_parameters=[text], job = 'get item info')[0][0]
+		if response.status_code != 200:
+			print( 'No item with ID "'+ text+'"')
+			continue
+		else:
+			item_cache[text] = response.json()			
+			with gzip.GzipFile('item_cache.gz', 'w') as outfile:
+				outfile.write(json.dumps(item_cache).encode('utf-8'))
 	plot_prices(text)
