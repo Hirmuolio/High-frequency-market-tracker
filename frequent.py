@@ -59,6 +59,10 @@ except:
 while True:
 	print('\n')
 	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing market...')
+
+	# Check if server is on
+	esi_calling.check_server_status()
+	
 	esi_response = import_orders( 10000002 )
 	
 	
@@ -80,7 +84,7 @@ while True:
 			current_prices[str(market_order['type_id'])]['sell_prices'].append( market_order['price'] )
 				
 	#Find the current dominating prices and add them to the cache
-	time_now = datetime.utcnow()
+	time_now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 	
 	for item_id in current_prices:
 		item_id = str(item_id)
@@ -113,11 +117,11 @@ while True:
 				duplicate = True
 		
 		if duplicate:
-			market_cache[ item_id ]['times'][-1] = str(time_now)
+			market_cache[ item_id ]['times'][-1] = time_now
 			market_cache[ item_id ]['sell_prices'][-1] = current_sell
 			market_cache[ item_id ]['buy_prices'][-1] = current_buy
 		else:
-			market_cache[ item_id ]['times'].append( str(time_now) )
+			market_cache[ item_id ]['times'].append( time_now )
 			market_cache[ item_id ]['sell_prices'].append( current_sell )
 			market_cache[ item_id ]['buy_prices'].append( current_buy )
 			

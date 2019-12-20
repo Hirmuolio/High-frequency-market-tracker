@@ -218,6 +218,17 @@ def call_was_succesful(esi_response, job, attempts):
 	return False
 	
 
+def check_server_status():
+	url = 'https://esi.evetech.net/v1/status/?datasource=tranquility'
+	headers = {"User-Agent":user_agent}
+	while True:
+		future = session.get(url, headers = headers)
+		esi_response = future.result()
+		if esi_response.status_code != 200:
+			time.sleep( 5 * 60 )
+		else:
+			break
+	
 
 def make_call(url, headers = '', data = '', page = None, calltype='get', job = 'make ESI call'):
 	#Makes single call to ESI and returns the used url and the response.

@@ -32,26 +32,25 @@ def plot_prices(item_id):
 		times = []
 	
 		for time in market_cache[str(item_id)]['times']:
-			times.append(datetime.strptime(time, '%Y-%m-%d  %H:%M:%S.%f'))
+			times.append(datetime.strptime(time, '%Y-%m-%d  %H:%M:%S'))
 		
-		plt.plot(times, market_cache[str(item_id)]['buy_prices'])
-		plt.plot(times, market_cache[str(item_id)]['sell_prices'])
+		plt.plot(times, market_cache[str(item_id)]['buy_prices'], 'r-', label='Buy prices')
+		plt.plot(times, market_cache[str(item_id)]['sell_prices'], 'b-', label='Sell prices')
 	
 		plt.gcf().autofmt_xdate()
 		
+		plt.title(item_cache[str(item_id)]['name'])
 		plt.xlabel('Time')
 		plt.ylabel('Price')
 		
-		plt.title(item_cache[str(item_id)]['name'])
+		plt.legend(loc='best')
+		
+		
 		plt.grid(True)
 		plt.show()
 		
 	else:
 		print('No data for "'+ item_id+ '"')
-	
-	
-	
-	
 
 
 while True:
