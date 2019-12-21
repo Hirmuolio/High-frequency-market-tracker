@@ -84,11 +84,11 @@ def logging_in(scopes):
 			config['authorizations'][tokens['character_id']] = tokens
 			with open('esi_config.json', 'w') as outfile:
 				json.dump(config, outfile, indent=2)
-			print( 'Character "'+ token_info['character_name'] +'" succesfully logged in' )
+			print( '  Character "'+ token_info['character_name'] +'" succesfully logged in' )
 			break
 		else:
 			number_of_attempts += 1
-			print('Retrying login process...')
+			print('  Retrying login process...')
 	
 def check_tokens(authorizer_id):
 	#Check if access token still good
@@ -110,11 +110,11 @@ def check_tokens(authorizer_id):
 	
 	#Check if token is valid
 	#Needs to be done like this since the expiry time may or may not exist
-	if datetime.utcnow() < datetime.strptime(tokens['expiry_time'], '%Y-%m-%d %H:%M:%S.%f') + timedelta( seconds = 10 ):
+	if datetime.utcnow() < datetime.strptime(tokens['expiry_time'], '%Y-%m-%d %H:%M:%S.%f') - timedelta( seconds = 20 ):
 		return
 	
 	# The tokens have expired (or are about to expire)
-	print( "Refreshing expired tokens" )
+	print( "  Refreshing expired tokens" )
 	client_id = config['client_id']
 	client_secret = config['client_secret']
 	
@@ -209,7 +209,7 @@ def call_was_succesful(esi_response, job, attempts):
 			time.sleep(esi_response.headers['x-esi-error-limit-reset']+1)
 		else:
 			#Some other error
-			print('Unknown error. Retrying')
+			print('  Unknown error. Retrying')
 	return False
 
 def many_calls_error_check(response_array, job, attempts):
@@ -268,7 +268,7 @@ def many_calls_error_check(response_array, job, attempts):
 				refetch_indexs.append(index)
 			else:
 				#Some other error
-				print('Unknown error.')
+				print('  Unknown error. Retrying.')
 		
 	
 	if time_to_wait > 0:
@@ -284,7 +284,7 @@ def check_server_status():
 		future = session.get(url, headers = headers)
 		esi_response = future.result()
 		if esi_response.status_code != 200:
-			print( "Server not OK. Waiting 5 minutes" )
+			print( "  Server not OK. Waiting 5 minutes" )
 			time.sleep( 5 * 60 )
 		else:
 			break
@@ -460,7 +460,6 @@ def call_esi(scope, url_parameters = [], etag = None, authorizer_id = None, data
 	else:
 		for parameter in url_parameters:
 			url = 'https://' + ('esi.evetech.net'+scope+'/?datasource='+datasource).replace('{par}', str(parameter)).replace('//', '/')
-			#print(url)
 			urls.append(url)
 			
 	responses = make_many_calls(urls, headers = headers, calltype=calltype, job = job)			
