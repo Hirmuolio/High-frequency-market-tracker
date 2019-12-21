@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 from datetime import timedelta
-#import numpy as np
+import random
 import gzip
 import time
 
@@ -158,12 +158,12 @@ while True:
 	
 	time_to_refetch = (esi_response[1] - datetime.utcnow()).total_seconds()
 	time_to_refetch_2 = (esi_response_2[1] - datetime.utcnow()).total_seconds()
-	time_to_refetch = max( time_to_refetch, time_to_refetch_2 )
+	time_to_refetch = round( max( time_to_refetch, time_to_refetch_2 ) + random.randint(2, 10) )
 	
 	current_prices = {}
 	esi_response = []
 	esi_response_2 = []
 	all_orders = []
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',round(time_to_refetch)+4 ,'seconds')
-	time.sleep( round(time_to_refetch)+4 )
+	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',time_to_refetch ,'seconds')
+	time.sleep( time_to_refetch )

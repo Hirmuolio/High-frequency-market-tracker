@@ -88,6 +88,7 @@ def logging_in(scopes):
 			break
 		else:
 			number_of_attempts += 1
+			check_server_status()
 			print('  Retrying login process...')
 	
 def check_tokens(authorizer_id):
@@ -136,7 +137,9 @@ def check_tokens(authorizer_id):
 			break
 		else:
 			number_of_attempts += 1
-			print('  Your login may have been invalidated.')
+			print('  Your login may have been invalidated. Retrying in 5 seconds.')
+			time.sleep( 5 )
+			check_server_status()
 		
 
 def get_token_info(tokens):
@@ -163,6 +166,15 @@ def get_token_info(tokens):
 			token_info['scopes'] = esi_response.json()['Scopes']
 			token_info['token_type'] = esi_response.json()['TokenType']
 			break
+		else:
+			check_server_status()
+			if number_of_attempts < 10:
+				print( "  Failed to get token info. Retrying...")
+				number_of_attempts +=1
+			else:
+				print( "  Failed to get token info 10 times. Something is probably very broken.\nExiting in 60 seconds...")
+				time.sleep( 60 )
+				sys.exit(0)
 		
 	return token_info
 
@@ -179,6 +191,9 @@ def call_was_succesful(esi_response, job, attempts):
 	#420 = error limited. Wait the duration and retry.
 	#[500, 503, 504] = Server problem. Just retry.
 	
+	if "warning" in esi_response.headers:
+		print( esi_response.headers["warning"] )
+	
 	if esi_response.status_code in [200, 204, 304, 400, 404]:
 		return True
 	else:
@@ -192,7 +207,7 @@ def call_was_succesful(esi_response, job, attempts):
 			print(' - no error message')
 		
 		if esi_response.status_code in [500, 502, 503, 504]:
-			time_to_wait = min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300)
+			time_to_wait = round( min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300) )
 			print('  Retrying in', time_to_wait, 'second...')
 			time.sleep(time_to_wait)
 		elif esi_response.status_code in [401, 402]:
@@ -230,6 +245,9 @@ def many_calls_error_check(response_array, job, attempts):
 	error_time_to_wait = 0
 	
 	for index  in range(number_of_responses):
+	
+		if "warning" in response_array[index].headers:
+			print( response_array[index].headers["warning"] )
 		try:
 			code = response_array[index].status_code
 		except:
@@ -249,7 +267,7 @@ def many_calls_error_check(response_array, job, attempts):
 			
 			if code in [500, 502, 503, 504]:
 				refetch_indexs.append(index)
-				time_to_wait = max( min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300), time_to_wait)
+				time_to_wait = round( max( min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300), time_to_wait) )
 			elif code in [401, 402]:
 				#TODO: Refresh autorization
 				print('  Restart the script to get fresh authorization. If problem continues your character has no access to thir resource.\nExiting in 60 seconds...')
@@ -283,6 +301,10 @@ def check_server_status():
 	while True:
 		future = session.get(url, headers = headers)
 		esi_response = future.result()
+		
+		if "warning" in esi_response.headers:
+			print( esi_response.headers["warning"] )
+			
 		if esi_response.status_code != 200:
 			print( "  Server not OK. Waiting 5 minutes" )
 			time.sleep( 5 * 60 )
