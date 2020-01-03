@@ -206,10 +206,12 @@ def call_was_succesful(esi_response, job, attempts):
 		except:
 			print(' - no error message')
 		
-		if esi_response.status_code in [500, 502, 503, 504]:
+		if esi_response.status_code in [500, 502, 503, 504, 520]:
 			time_to_wait = round( min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300) )
 			print('  Retrying in', time_to_wait, 'second...')
 			time.sleep(time_to_wait)
+		elif code in [520]:
+				time_to_wait = 60
 		elif esi_response.status_code in [401, 402]:
 			#TODO: Refresh autorization
 			print('Restart the script to get fresh authorization. If problem continues your character has no access to thir resource.\nExiting in 60 seconds...')
@@ -238,6 +240,7 @@ def many_calls_error_check(response_array, job, attempts):
 	#403 = No permission. Call was succesful, problem is somewhere else.
 	#420 = error limited. Wait the duration and retry.
 	#[500, 503, 504] = Server problem. Just retry.
+	# 520 = Not sure. Too soon after downtime? Wait a minute and retry.
 	
 	number_of_responses = len( response_array )
 	refetch_indexs = []
@@ -268,6 +271,9 @@ def many_calls_error_check(response_array, job, attempts):
 			if code in [500, 502, 503, 504]:
 				refetch_indexs.append(index)
 				time_to_wait = round( max( min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300), time_to_wait) )
+			elif code in [520]:
+				refetch_indexs.append(index)
+				time_to_wait = max( 60, time_to_wait)
 			elif code in [401, 402]:
 				#TODO: Refresh autorization
 				print('  Restart the script to get fresh authorization. If problem continues your character has no access to thir resource.\nExiting in 60 seconds...')
@@ -286,7 +292,7 @@ def many_calls_error_check(response_array, job, attempts):
 				refetch_indexs.append(index)
 			else:
 				#Some other error
-				print('  Unknown error. Retrying.')
+				print('  Unknown error.')
 		
 	
 	if time_to_wait > 0:
