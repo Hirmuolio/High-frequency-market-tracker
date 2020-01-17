@@ -13,7 +13,7 @@ from datetime import timedelta
 
 from requests_futures.sessions import FuturesSession
 
-session = FuturesSession(max_workers=90)
+session = FuturesSession(max_workers=50)
 
 
 scopes = ''
@@ -190,6 +190,7 @@ def call_was_succesful(esi_response, job, attempts):
 	#403 = No permission. Call was succesful, problem is somewhere else.
 	#420 = error limited. Wait the duration and retry.
 	#[500, 503, 504] = Server problem. Just retry.
+	# 520 = Not sure. Too early called after downtime?
 	
 	if "warning" in esi_response.headers:
 		print( esi_response.headers["warning"] )
@@ -206,7 +207,7 @@ def call_was_succesful(esi_response, job, attempts):
 		except:
 			print(' - no error message')
 		
-		if esi_response.status_code in [500, 502, 503, 504, 520]:
+		if esi_response.status_code in [500, 502, 503, 504]:
 			time_to_wait = round( min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 300) )
 			print('  Retrying in', time_to_wait, 'second...')
 			time.sleep(time_to_wait)
@@ -312,8 +313,8 @@ def check_server_status():
 			print( esi_response.headers["warning"] )
 			
 		if esi_response.status_code != 200:
-			print( "  Server not OK. Waiting 5 minutes" )
-			time.sleep( 5 * 60 )
+			print( "  Server not OK. Waiting 1 minute" )
+			time.sleep( 60 )
 		else:
 			break
 	

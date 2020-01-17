@@ -16,26 +16,35 @@ esi_calling.set_user_agent('Hirmuolio/high-frequency-market-tracker')
 def import_orders(region_id):
 	#10000002 = Jita
 	all_orders = []
+	all_expires_at = []
 	
 	response_array = esi_calling.call_esi(scope = '/v1/markets/{par}/orders/', url_parameters=[region_id], job = 'get market orders')[0]
 	
 	for response in response_array:
 		all_orders.extend(response.json())
+		response_expires_at = datetime.strptime( response.headers['expires'], '%a, %d %b %Y %H:%M:%S GMT' )
+		all_expires_at.append( response_expires_at )
 	print('  Got {:,d} orders.'.format(len(all_orders)))
-	expires = max( datetime.utcnow(), datetime.strptime(response_array[-1].headers['expires'], '%a, %d %b %Y %H:%M:%S GMT') )
+	expires_at = max( all_expires_at )
+	expires = max( datetime.utcnow(), expires_at )
 	
 	return [all_orders, expires]
 
 def structure_import_orders(structure_id):
 	all_orders = []
+	all_expires_at = []
 			
 	response_array = esi_calling.call_esi(scope = '/v1/markets/structures/{par}', url_parameters=[structure_id], authorizer_id = user_id, job = 'get structure market orders')[0]
 	
 	for response in response_array:
 		all_orders.extend(response.json())
+		response_expires_at = datetime.strptime( response.headers['expires'], '%a, %d %b %Y %H:%M:%S GMT' )
+		all_expires_at.append( response_expires_at )
 	print('  Got {:,d} orders from structure.'.format(len(all_orders)))
 	
-	expires = max( datetime.utcnow(), datetime.strptime(response_array[-1].headers['expires'], '%a, %d %b %Y %H:%M:%S GMT') )
+	#expires = max( datetime.utcnow(), datetime.strptime(response_array[-1].headers['expires'], '%a, %d %b %Y %H:%M:%S GMT') )
+	expires_at = max( all_expires_at )
+	expires = max( datetime.utcnow(), expires_at )
 	
 	return [all_orders, expires]
 
@@ -52,39 +61,36 @@ def prices_are_about_same( price1, price2, price3 ):
 	if diff1 and diff2:
 		return True
 	return False
-	
-try:
-	with gzip.GzipFile('market_cache.gz', 'r') as fin:
-		market_cache = json.loads(fin.read().decode('utf-8'))
-except:
-	print('no market cache found')
-	market_cache = {}
 
 
-
-esi_calling.load_config()
-authorized_ids = esi_calling.get_authorized()
-
-while len( esi_calling.get_authorized() ) == 0:
-	esi_calling.logging_in('esi-markets.structure_markets.v1')
-user_id = next(iter(authorized_ids))
-
-#Main loop
-while True:
+def update_prices():
 	print('\n')
+	global market_cache
 	# Check if server is on
+	
+	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing structure market...')
 	esi_calling.check_server_status()
+	esi_response_2 = structure_import_orders(1028858195912)
 	
 	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing market...')
 	esi_response = import_orders( 10000002 )
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing structure market...')
-	esi_response_2 = structure_import_orders(1028858195912)
-	
 	all_orders = esi_response[0] + esi_response_2[0]
-	esi_response[0] = []
-	esi_response_2[0] = []
 	
+	# Find response espiry times.
+	jita_refresh_at = esi_response[1]
+	pert_refresh_at = esi_response_2[1]
+	jita_refresh_in =  ( jita_refresh_at - datetime.utcnow()).total_seconds()
+	pert_refresh_in =  ( pert_refresh_at - datetime.utcnow()).total_seconds()
+	if min( jita_refresh_in, pert_refresh_in ) < 10:
+		# They were called too soon
+		print(' ', round(jita_refresh_in), 'seconds to Jita refresh')
+		print(' ', round(pert_refresh_in), 'seconds to Perimeter refresh')
+		print( '  Calls made too soon. Recalling...' )
+		return max( 0, min( jita_refresh_in, pert_refresh_in ) )
+	
+	esi_response = []
+	esi_response_2 = []
 	
 	#Process market orders
 	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Processing market orders...')
@@ -156,14 +162,38 @@ while True:
 		print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Failed to save cache. Cache will be saved after next import (do not keep the cache opened in other programs to avoid this)')
 	
 	
-	time_to_refetch = (esi_response[1] - datetime.utcnow()).total_seconds()
-	time_to_refetch_2 = (esi_response_2[1] - datetime.utcnow()).total_seconds()
-	time_to_refetch = round( max( time_to_refetch, time_to_refetch_2 ) + random.randint(2, 10) )
+	jita_refresh_in =  ( jita_refresh_at - datetime.utcnow()).total_seconds()
+	pert_refresh_in =  ( pert_refresh_at - datetime.utcnow()).total_seconds()
+	print(' ', round(jita_refresh_in), 'seconds to Jita refresh')
+	print(' ', round(pert_refresh_in), 'seconds to Perimeter refresh')
+	time_to_refetch = round( max( jita_refresh_in, pert_refresh_in ) + 1 )
 	
-	current_prices = {}
-	esi_response = []
-	esi_response_2 = []
-	all_orders = []
+	if abs( jita_refresh_in - pert_refresh_in ) > 100 and random.randint(0,100) < 30:
+		#Try to sync them.
+		time_to_refetch = round( 300 + jita_refresh_in )
+		print( "  Attempting to sync data" )
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',time_to_refetch ,'seconds')
-	time.sleep( time_to_refetch )
+	return time_to_refetch
+
+
+# Prepare stuff
+try:
+	with gzip.GzipFile('market_cache.gz', 'r') as fin:
+		market_cache = json.loads(fin.read().decode('utf-8'))
+except:
+	print('no market cache found')
+	market_cache = {}
+
+esi_calling.load_config()
+authorized_ids = esi_calling.get_authorized()
+
+while len( esi_calling.get_authorized() ) == 0:
+	esi_calling.logging_in('esi-markets.structure_markets.v1')
+user_id = next(iter(authorized_ids))
+
+#Main loop
+while True:
+	wait_time = update_prices()
+	
+	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',wait_time ,'seconds')
+	time.sleep( wait_time )
