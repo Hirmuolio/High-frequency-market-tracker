@@ -320,7 +320,7 @@ def str_time_to_datetime( time_string : str ):
 def timestamped_print( message : str ):
 	print(datetime.now().strftime('%H:%M:%S'), message)
 
-def construct_url( endpoint : str, parameter : str ):
+def construct_url( endpoint : str, parameter : str = "" ):
 	# Endpoint should be something like "/v1/contracts/public/{}/" where {} is replaced by the parameter
 	base_url = "esi.evetech.net/"
 	
@@ -366,7 +366,7 @@ def error_handling_futures( esi_response, attempts ):
 		
 		if esi_response.status_code in [500, 502, 503, 504]:
 			# Server is having bad time. Just wait and retry.
-			time_to_wait = min( (2 ** attempts) + (random.randint(0, 1000) / 1000), 1800)
+			time_to_wait = min( (2 ** attempts) * (random.randint(0, 100) / 1000), 1800)
 			return time_to_wait
 		elif esi_response.status_code == 402:
 			input("Authorization issue. Press any key to exit script.")
@@ -423,47 +423,72 @@ def call_many( call_urls : list[str], authorized_character_id : str = '' ):
 	# Returns list of responses
 	# The returned responses may be in any order
 	
+	if not call_urls:
+		return []
+	
+	if len(call_urls) == 1:
+		return [ call_esi( call_urls[0], authorized_character_id ) ]
+	
 	headers = {"User-Agent":user_agent}
 	if authorized_character_id:
 		token = get_access_token( authorized_character_id )
 		headers["Authorization"] = "Bearer {}".format( token )
 	
-	session = FuturesSession()
+	workers = min( 90, len(call_urls) )
+	session = FuturesSession(max_workers=workers)
 	
-	some_calls_failed = True
-	loops_done = 0
+	all_calls_done = False
 	returns = []
+	remaining = call_urls
 	
-	while some_calls_failed:
-		timestamped_print( "Making " + str( len(call_urls) ) + " calls..."  )
+	total_calls = len(call_urls)
+	done_calls = 0
+	
+	timestamped_print( "Making " + str( len(call_urls) ) + " calls..."  )
+	
+	while not all_calls_done:
+		active = remaining[:500]
+		remaining = remaining[500:]
+		
+		print( "\r ", done_calls, '/', total_calls, "      ", end="", flush=True)
+		
 		futures = []   # List of [future, url] pairs
 		responses = [] # List of [response, url] pairs
 		
-		for url in call_urls:
-			futures.append( [ session.get(url, headers = headers), url ] )
+		for url in active:
+			futures.append( session.get(url, headers = headers) )
 		
 		for future in futures:
-			responses.append( [ future[0].result(), future[1] ] )
+			responses.append( future.result() )
 		
 		sleep_time = 0
-		call_urls = []
+		error_count = 0
 		for response in responses:
-			wait = error_handling_futures( response[0], loops_done )
+			wait = error_handling_futures( response, 0 )
 			if( wait != 0 ):
-				call_urls.append( response[1] )
+				error_count += 1
+				remaining.append( response.url )
 				sleep_time = max( wait, sleep_time )
 			else:
-				returns.append( response[0] )
-		if( call_urls ):
+				done_calls += 1
+				returns.append( response )
+		if( sleep_time > 0 ):
 			# Retry errored urls
-			timestamped_print( "Refetching erroreed calls in " + str( sleep_time ) + " seconds..." )
-			time.sleep( sleep_time )
+			# TODO better handling for situations where there are lots of errors across multiple calls
+			if error_count > 5:
+				sleep_time = max( 1, sleep_time )
+			elif error_count > 10:
+				sleep_time = max( 5, sleep_time )
+			elif error_count > 20:
+				sleep_time = max( 10, sleep_time )
 			
-			loops_done += 1
-		else:
+			if sleep_time > 2:
+				timestamped_print( "There were {1} errors. Resuming calls in {0:.1f} seconds...".format( sleep_time, error_count ) )
+			time.sleep( sleep_time )
+		if not remaining:
 			# Everything is done
-			some_calls_failed = False
-	
+			all_calls_done = True
+	print( "calls done" )
 	return returns
 
 def call_many_pages( call_url : str, authorized_character_id : str = '' ):
@@ -485,7 +510,7 @@ def call_many_pages( call_url : str, authorized_character_id : str = '' ):
 	# Get the rest of the pages
 	
 	session = FuturesSession()
-	returns = []
+	returns = [ page_1 ]
 	done = False
 	loops_done = 0;
 	while not done:
