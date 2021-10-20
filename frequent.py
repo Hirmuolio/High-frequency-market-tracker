@@ -12,37 +12,41 @@ import esi_calling
 
 esi_calling.set_user_agent('Hirmuolio/high-frequency-market-tracker')
 
+def string_to_time( time : str ):
+	# This format is used in normal API calls
+	return datetime.strptime( time, '%a, %d %b %Y %H:%M:%S GMT' )
 
-def import_orders(region_id):
+def import_orders( region_id : str ):
 	#10000002 = Jita
 	all_orders = []
 	all_expires_at = []
 	
-	response_array = esi_calling.call_esi(scope = '/v1/markets/{par}/orders/', url_parameters=[region_id], job = 'get market orders')[0]
+	url = esi_calling.construct_url( '/v1/markets/{}/orders/', region_id )
+	response_array = esi_calling.call_many_pages( url )
 	
 	for response in response_array:
 		all_orders.extend(response.json())
-		response_expires_at = datetime.strptime( response.headers['expires'], '%a, %d %b %Y %H:%M:%S GMT' )
+		response_expires_at = string_to_time( response.headers['expires'] )
 		all_expires_at.append( response_expires_at )
-	print('  Got {:,d} orders.'.format(len(all_orders)))
+	print('  Got {:,d} orders from Forge region.'.format(len(all_orders)))
 	expires_at = max( all_expires_at )
 	expires = max( datetime.utcnow(), expires_at )
 	
 	return [all_orders, expires]
 
-def structure_import_orders(structure_id):
+def structure_import_orders( structure_id : str ):
 	all_orders = []
 	all_expires_at = []
-			
-	response_array = esi_calling.call_esi(scope = '/v1/markets/structures/{par}', url_parameters=[structure_id], authorizer_id = user_id, job = 'get structure market orders')[0]
+	
+	url = esi_calling.construct_url( '/v1/markets/structures/{}', structure_id )
+	response_array = esi_calling.call_many_pages( url, user_id )
 	
 	for response in response_array:
 		all_orders.extend(response.json())
-		response_expires_at = datetime.strptime( response.headers['expires'], '%a, %d %b %Y %H:%M:%S GMT' )
+		response_expires_at = string_to_time( response.headers['expires'] )
 		all_expires_at.append( response_expires_at )
-	print('  Got {:,d} orders from structure.'.format(len(all_orders)))
+	print('  Got {:,d} orders from TTT.'.format(len(all_orders)))
 	
-	#expires = max( datetime.utcnow(), datetime.strptime(response_array[-1].headers['expires'], '%a, %d %b %Y %H:%M:%S GMT') )
 	expires_at = max( all_expires_at )
 	expires = max( datetime.utcnow(), expires_at )
 	
@@ -68,11 +72,11 @@ def update_prices():
 	global market_cache
 	# Check if server is on
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing structure market...')
+	esi_calling.timestamped_print( ' Importing structure market...' )
 	esi_calling.check_server_status()
-	esi_response_2 = structure_import_orders(1028858195912)
+	esi_response_2 = structure_import_orders(1028858195912) # Perimeter structure
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Importing market...')
+	esi_calling.timestamped_print( ' Importing market...' )
 	esi_response = import_orders( 10000002 )
 	
 	all_orders = esi_response[0] + esi_response_2[0]
@@ -86,14 +90,14 @@ def update_prices():
 		# They were called too soon
 		print(' ', round(jita_refresh_in), 'seconds to Jita refresh')
 		print(' ', round(pert_refresh_in), 'seconds to Perimeter refresh')
-		print( '  Calls made too soon. Recalling...' )
-		return max( 0, min( jita_refresh_in, pert_refresh_in ) )
+		print( '  Calls made too soon. Recalling in 11 seconds...' )
+		return 11
 	
 	esi_response = []
 	esi_response_2 = []
 	
 	#Process market orders
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Processing market orders...')
+	esi_calling.timestamped_print( ' Processing market orders...' )
 	
 	current_prices = {}
 	
@@ -184,16 +188,17 @@ except:
 	print('no market cache found')
 	market_cache = {}
 
-esi_calling.load_config()
+esi_calling.load_esi_config()
 authorized_ids = esi_calling.get_authorized()
 
 while len( esi_calling.get_authorized() ) == 0:
-	esi_calling.logging_in('esi-markets.structure_markets.v1')
-user_id = next(iter(authorized_ids))
+	esi_calling.log_in_pkce( ['esi-markets.structure_markets.v1'] )
+	authorized_ids = esi_calling.get_authorized()
+user_id = authorized_ids[0]
 
 #Main loop
 while True:
 	wait_time = update_prices()
 	
-	print(datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), '- Fetching new orders in',wait_time ,'seconds')
+	esi_calling.timestamped_print( ' Fetching new orders in ' + str(wait_time) + ' seconds' )
 	time.sleep( wait_time )
